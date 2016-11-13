@@ -4,7 +4,7 @@
 * Plugin Name: AWS S3 Bucket Browser
 * Plugin URI: https://www.wptechguides.com
 * Description: A custom Amazon S3 File Browser
-* Version: 0.3
+* Version: 1.1
 * Author: Dan Dulaney
 * Author URI: https://www.convexcode.com
 **/
@@ -154,31 +154,6 @@ function s3_browse_shortcode_disp($atts){
 	</div>
 	</div>";
 
-	
-
-//function to allow sorting of results from AWS S3 List
-	function s3_browse_array_orderby()
-	{
-	    $args = func_get_args();
-	    $data = array_shift($args);
-	    foreach ($args as $n => $field) {
-	        if (is_string($field)) {
-
-	            $tmp = array();
-	            foreach ($data as $key => $row)
-	                $tmp[$key] = $row[$field];
-		            $args[$n] = $tmp;
-	            }
-	    }
-
-	    $args[] = &$data;
-	    call_user_func_array('array_multisort', $args);
-
-	    return array_pop($args);
-	}
-
-
-
 
 
 $credentials = new Credentials("$aws_access_key", "$aws_secret");
@@ -192,152 +167,112 @@ $credentials = new Credentials("$aws_access_key", "$aws_secret");
 try {
 	$objects = $s3Client->getIterator('ListObjects', array('Bucket' => $bucket));
 
-	$dirarray[] = './';
-	$dirlevel[] = '0';
+	$path_array=array();
+	$size_array=array();
+	$link_array=array();
 
 	foreach ($objects as $object) {
 		if (!isset($objectarray)) { $objectarray = array(); }
 		//print_r($object);
-		$tempitemarray = array();
-		$tempitemarray['fullname'] = $object['Key'];
-		$tempitemarray['size'] = $object['Size'];
-		$tempitemarray['base'] = basename($object['Key']);
-		$tempitemarray['dir'] = dirname($object['Key']).'/';
+		$name = $object['Key'];
+		$size = $object['Size'];
 
+		if ($object['Size'] != '0') {
 
-		if ($object['Size'] == '0') {
-
-			$dirarray[] = $object['Key'];
-			$tempdirlevel = substr_count(($object['Key']),'/');
-			$dirlevel[] = $tempdirlevel;
-			
-
-		} else {
-
-			
-
-			$objectarray[] = $tempitemarray;
-
-		}
-
-
-	}
-
-	
-	$objectarray = s3_browse_array_orderby($objectarray, 'dir', SORT_DESC, 'base', SORT_DESC);
-
-
-	$numfolders = count($dirarray);
-
-	$major_folder_num = 0;
-
-	for ($i=0; $i<$numfolders; $i++) {
-
-		$result = array();
-
-		$items_in_folder = array();
-
-		$current_folder = $dirarray[$i];
-		$current_level = $dirlevel[$i];
-
+			$base = basename($object['Key']);
 		
-		foreach ($objectarray as $link) {
-		    if (in_array($current_folder, $link)) {
-		        $result[] = $link;
-		    }
-		}
-
-		$in_folder_count=count($result);
-
-
-		for ($z=0;$z<$in_folder_count;$z++) {
-		
-			$name = $result[$z]['fullname'];
-			$basename = $result[$z]['base'];
-			$dirname = $result[$z]['dir'];
-			$size = $result[$z]['size'];
-
 			$cmd = $s3Client->getCommand('GetObject', [
 			    'Bucket' => "$bucket",
 			    'Key' => "$name",
 				'ResponseContentType'           => 'application/octet-stream',
-				'ResponseContentDisposition'    => 'attachment; filename="'.$basename.'"',
+				'ResponseContentDisposition'    => 'attachment; filename="'.$base.'"',
 			]);
 
 			$request = $s3Client->createPresignedRequest($cmd, '+60 minutes');
 
 			$link = (string) $request->getUri();
-			//$link = 'fakelink';
-			$items_in_folder[] = array(
-					"name" => $basename,
-					"type" => "file",
-					"path" => 'Home/'.$name,
-					"link" => $link,
-					"size" => $size
-				);
-
-
-		}
+			$path = 'Home/'.$name;
 		
-
-		if ($dirname == './') { 
-
-			$count_em = count($items_in_folder);
-			for ($x=0;$x<$count_em;$x++) {
-				$files[] = $items_in_folder[$x];
-				$major_folder_num++;
-			}
-
-
-
-		} else {
-
-			if($current_level == '2') {
-				$y = $major_folder_num-1;
-				//echo "Major folder Number: $y<br><br>";
-				
-				array_push($files[$y]['items'], array(
-					"name" => basename($current_folder),
-					"type" => "folder",
-					"path" => 'Home/'.$current_folder,
-					"items" => $items_in_folder,
-					"level" => $current_level,
-
-				));
-
-				
-
-			}
-			elseif($current_level == '3') {
-				
-			}
-			else {
-
-				$files[] = array(
-					"name" => basename($current_folder),
-					"type" => "folder",
-					"path" => 'Home/'.$current_folder,
-					"items" => $items_in_folder,
-					"level" => $current_level,
-					"folder_num" => $z
-				);
-
-				$major_folder_num++;
-			}
+			$path_array[] = $path;
+			$size_array[] = $size;
+			$link_array[] = $link;
 
 		}
-
-
+	
 	}
 
 
-	//json encodes the whole object
-	$json_final = json_encode(array(
-		"name" => "Home",
-		"type" => "folder",
-		"path" => "Home",
-	"items" => $files
-	));
+function &placeInArray(array &$dest, array $path_array, $size, $pathorig,$link) {
+    // If we're at the leaf of the tree, just push it to the array and return
+	//echo $pathorig;
+	//echo $size."<br>";
+
+	global $folders_added;
+    if (count($path_array) === 1) {
+        if ($path_array[0] !== '') {
+		  $file_array = array();
+		  $file_array['name'] = $path_array[0];
+		 $file_array['size'] = $size;
+		  $file_array['type'] = 'file';
+		 $file_array['path'] = $pathorig;
+		$file_array['link'] = $link;
+            array_push($dest['items'], $file_array);
+        }
+        return $dest;
+    }
+
+    // If not (if multiple elements exist in path_array) then shift off the next path-part...
+    // (this removes $path_array's first element off, too)
+    $path = array_shift($path_array);
+
+    if ($path) {
+
+		$newpath_temp = explode($path,$pathorig);
+		$newpath = $newpath_temp[0].$path.'/';
+        // ...make a new sub-array for it...
+
+
+        //if (!isset($dest['items'][$path])) {
+		if(!in_array($newpath,$folders_added,true)) {
+            $dest['items'][] = array(
+
+			'name' => $path,
+			'type' => 'folder',
+			'path' => $newpath,
+			'items' => array()	
+
+		  );
+		$folders_added[] = $newpath;
+		//print_r($folders_added);
+        } 
+		$count = count($dest['items']);
+		$count--;
+		//echo $count.'<br>';	
+		//print_r($dest['items'][$path]);
+
+        // ...and continue the process on the sub-array
+        return placeInArray($dest['items'][$count], $path_array, $size, $pathorig,$link);
+    }
+
+    // This is just here to blow past multiple slashes (an empty path-part), like
+    // /path///to///thing
+    return placeInArray($dest, $path_array, $size, $pathorig,$link);
+}
+
+	$output = array();
+	$folders_added = array();
+	$i=0;
+	foreach ($path_array as $path) {
+		$size = $size_array[$i];
+		$link = $link_array[$i];
+	    placeInArray($output, explode('/', $path), $size, $path, $link);
+		$i++;
+	}
+
+	
+	
+
+	$json_final = json_encode($output['items'][0]);
 
 	//enques the js script and sends the json object to it.
 	wp_enqueue_script( 'browse-s3-js' );

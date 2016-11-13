@@ -43,7 +43,7 @@ Shortcode Use: `[s3browse bucket=yourbucketname]`
 
 * You must have the correct CORS configuration set for your bucket:
 
-```<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8"?>
 <CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
     <CORSRule>
         <AllowedOrigin>*</AllowedOrigin>
@@ -53,7 +53,7 @@ Shortcode Use: `[s3browse bucket=yourbucketname]`
         <MaxAgeSeconds>3000</MaxAgeSeconds>
         <AllowedHeader>*</AllowedHeader>
     </CORSRule>
-</CORSConfiguration>```
+</CORSConfiguration>
 
 == Installation ==
 
@@ -96,6 +96,11 @@ Features Planned for Future Versions:
 * Ability to Create a Bucket inside Plugin
 
 == Changelog ==
+
+= 1.1 =
+* Removed limitations on recursive folder depth
+* Fixed possible issue with folders created using a SDK
+* Cleaned up code quite a bit / cut down code size
 
 = 1.0 =
 * Initial Plugin Release
